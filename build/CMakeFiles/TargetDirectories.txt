@@ -1,3 +1,0 @@
-/home/dips/Workspace/SIH_2024/QuantaShield/build/CMakeFiles/QuantaShield-Agent.dir
-/home/dips/Workspace/SIH_2024/QuantaShield/build/CMakeFiles/edit_cache.dir
-/home/dips/Workspace/SIH_2024/QuantaShield/build/CMakeFiles/rebuild_cache.dir
