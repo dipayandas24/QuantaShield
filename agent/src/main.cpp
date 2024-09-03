@@ -6,10 +6,13 @@
 #include <arpa/inet.h>
 #include <array>
 #include <cstdio>
+#include <fstream>          
 #include <memory>
 #include <stdexcept>
 #include <string>
 #include <vector>
+#include <sys/stat.h>       
+#include <sys/types.h>      
 
 // Function to execute a shell command and return the output
 std::string exec(const char* cmd) {
@@ -35,37 +38,80 @@ std::string get_application_name(int port) {
     return result.empty() ? "Unknown" : result;
 }
 
-// Function to print packet details including application name
+// Function to ensure the logs directory exists
+void ensure_logs_directory() {
+    struct stat info;
+    if (stat("../agent/logs", &info) != 0) {
+        // Directory does not exist
+        if (mkdir("../agent/logs", 0755) != 0) {
+            std::cerr << "Error: Unable to create logs directory!" << std::endl;
+            exit(1);
+        }
+    } else if (!(info.st_mode & S_IFDIR)) {
+        // Path exists but is not a directory
+        std::cerr << "Error: logs path exists but is not a directory!" << std::endl;
+        exit(1);
+    }
+}
+
+// Function to log packet details to a file
+void log_packet_info(const std::string& log_entry) {
+    std::ofstream logfile("../agent/logs/network_traffic.log", std::ios::app);
+    if (logfile.is_open()) {
+        logfile << log_entry << std::endl;
+        logfile.close();
+    } else {
+        std::cerr << "Error: Unable to open log file!" << std::endl;
+    }
+}
+
+// Function to print and log packet details including application name
 void print_packet_info(const u_char *packet, struct pcap_pkthdr header) {
     struct ip *ip_header = (struct ip*)(packet + 14); // Skip Ethernet header (14 bytes)
     int ip_header_len = ip_header->ip_hl * 4;
 
-    std::cout << "Source IP: " << inet_ntoa(ip_header->ip_src) << std::endl;
-    std::cout << "Destination IP: " << inet_ntoa(ip_header->ip_dst) << std::endl;
+    std::string src_ip = inet_ntoa(ip_header->ip_src);
+    std::string dst_ip = inet_ntoa(ip_header->ip_dst);
+    std::string protocol;
+    std::string log_entry;
+
+    log_entry += "Source IP: " + src_ip + "\n";
+    log_entry += "Destination IP: " + dst_ip + "\n";
 
     if (ip_header->ip_p == IPPROTO_TCP) {
-        std::cout << "Protocol: TCP" << std::endl;
+        protocol = "TCP";
         struct tcphdr *tcp_header = (struct tcphdr*)(packet + 14 + ip_header_len);
         int src_port = ntohs(tcp_header->th_sport);
         int dst_port = ntohs(tcp_header->th_dport);
-        std::cout << "Source Port: " << src_port << " (" << get_application_name(src_port) << ")" << std::endl;
-        std::cout << "Destination Port: " << dst_port << " (" << get_application_name(dst_port) << ")" << std::endl;
+        log_entry += "Protocol: " + protocol + "\n";
+        log_entry += "Source Port: " + std::to_string(src_port) + " (" + get_application_name(src_port) + ")\n";
+        log_entry += "Destination Port: " + std::to_string(dst_port) + " (" + get_application_name(dst_port) + ")\n";
     } else if (ip_header->ip_p == IPPROTO_UDP) {
-        std::cout << "Protocol: UDP" << std::endl;
+        protocol = "UDP";
         struct udphdr *udp_header = (struct udphdr*)(packet + 14 + ip_header_len);
         int src_port = ntohs(udp_header->uh_sport);
         int dst_port = ntohs(udp_header->uh_dport);
-        std::cout << "Source Port: " << src_port << " (" << get_application_name(src_port) << ")" << std::endl;
-        std::cout << "Destination Port: " << dst_port << " (" << get_application_name(dst_port) << ")" << std::endl;
+        log_entry += "Protocol: " + protocol + "\n";
+        log_entry += "Source Port: " + std::to_string(src_port) + " (" + get_application_name(src_port) + ")\n";
+        log_entry += "Destination Port: " + std::to_string(dst_port) + " (" + get_application_name(dst_port) + ")\n";
     } else {
-        std::cout << "Protocol: Other" << std::endl;
+        protocol = "Other";
+        log_entry += "Protocol: " + protocol + "\n";
     }
 
-    std::cout << "Packet Length: " << header.len << std::endl;
-    std::cout << "------------------------------------" << std::endl;
+    log_entry += "Packet Length: " + std::to_string(header.len) + "\n";
+    log_entry += "------------------------------------\n";
+
+    // Log to file
+    log_packet_info(log_entry);
+
+    // Print to console
+    std::cout << log_entry;
 }
 
 int main() {
+    ensure_logs_directory(); // Ensure logs directory exists
+
     char errbuf[PCAP_ERRBUF_SIZE];
     pcap_if_t *alldevs, *device;
 
@@ -94,4 +140,3 @@ int main() {
     pcap_freealldevs(alldevs);
     return 0;
 }
-
